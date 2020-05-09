@@ -34,7 +34,11 @@ def all_csv_file_to_db(db_file_name, csv_file_dir):
     conn = sqlite3.connect(db_file_name)
     with conn:
         sql = """
-        INSERT INTO raw_prices(code,date,open,high,low,close,volume)
+        INSERT OR REPLACE INTO raw_prices(code,date,open,high,low,close,volume)
         VALUES(?,?,?,?,?,?,?)
         """
         conn.executemany(sql, price_generator)
+
+if __name__ == "__main__":
+    all_csv_file_to_db('tse.db', 'save_csv')
+
