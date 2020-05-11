@@ -4,9 +4,8 @@ import datetime
 import os
 import sqlite3
 
-db_file_name = 'tse.db'
 
-def create_divide_union_table():
+def create_divide_union_table(db_file_name):
     conn = sqlite3.connect(db_file_name)
     # curs = conn.cursor()
     # curs.execute('CREATE TABLE if not exists divide_union_data(code TEXT, date_of_right_allotment TEXT, before REAL, after REAL, PRIMARY KEY(code, date_of_right_allotment)')
@@ -18,16 +17,13 @@ def create_divide_union_table():
         """
         conn.execute(sql)
 
-
-
-
 def generater_devide_union_from_csv_file(csv_file_name, code):
-    with open(csv_file_name) as f:
+    with open(csv_file_name, encoding="shift_jis") as f:
         reader = csv.reader(f)
         next(reader) # 先頭行を飛ばす
 
         def parse_recode(row):
-            d = datetime.datetime.strptime(row[0], '%Y-%m-%d').date() # 日
+            d = datetime.datetime.strptime(row[0], '%Y/%m/%d').date() # 日
 
             r = float(row[4]) # 調整前終値
             a = float(row[6]) # 調整後終値
@@ -56,7 +52,7 @@ def generate_from_csv_dir(csv_dir, generate_func):
             yield d
 
 def all_csv_file_to_divide_union_table(db_file_name, csv_file_dir):
-    divide_union_generator = generate_from_csv_dir(csv_file_dir, generate_devide_union_from_csv_file)
+    divide_union_generator = generate_from_csv_dir(csv_file_dir, generater_devide_union_from_csv_file)
     conn = sqlite3.connect(db_file_name)
     with conn:
         sql = """
@@ -66,5 +62,4 @@ def all_csv_file_to_divide_union_table(db_file_name, csv_file_dir):
         conn.executemany(sql, divide_union_generator)
 
 if __name__ == '__main__':
-    create_divide_union_table()
-
+    all_csv_file_to_divide_union_table('tse.db', 'save_csv')

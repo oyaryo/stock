@@ -1,10 +1,11 @@
 import sqlite3
 import time
+import pandas as pd
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 
 db_file_name = 'tse.db'
-save_dir = 'save_csv/'
+save_dir = '~/Document/Python/working/stock/Save_csv/'
 
 def download_stock_csv(code_range, save_dir):
 
@@ -22,13 +23,15 @@ def download_stock_csv(code_range, save_dir):
     input('After login, press enter: ')
 
     for code in code_range:
-        url = 'https://stocks.finance.yahoo.co.jp/stocks/history/?code={0}.T'.format(code[0])
-        driver.get(url)
+        code = int(code[0])
+        if code > 7239:
+            url = 'https://stocks.finance.yahoo.co.jp/stocks/history/?code={0}.T'.format(code)
+            driver.get(url)
 
-        try:
-            driver.find_element_by_css_selector('a.stocksCsvBtn').click()
-        except NoSuchElementException:
-            pass
+            try:
+                driver.find_element_by_css_selector('a.stocksCsvBtn').click()
+            except NoSuchElementException:
+                pass
 
 if __name__ == '__main__':
     import os
@@ -39,5 +42,3 @@ if __name__ == '__main__':
     download_stock_csv(codes, os.getcwd())
     curs.close()
     conn.close()
-
-
