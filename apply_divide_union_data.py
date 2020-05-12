@@ -71,3 +71,14 @@ def apply_divide_union_data(db_file_name, date_of_right_allotment):
               'VALUES(?,?)',
               (code, date_of_right_allotment))
 
+if __name__ == "__main__":
+    conn = sqlite3.connect('tse.db')
+    curs = conn.cursor()
+    curs.execute('SELECT date_of_right_allotment FROM divide_union_data')
+    allotments = curs.fetchall()
+    curs.close()
+    conn.close()
+
+    for allotment in allotments:
+        print(allotment[0])
+        apply_divide_union_data('tse.db', allotment[0])
