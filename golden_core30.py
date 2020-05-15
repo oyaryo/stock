@@ -28,22 +28,27 @@ def generate_cross_date_list(prices):
     sma_5_over_25 = sma_5 > sma_25
     cross = sma_5_over_25 != sma_5_over_25.shift(1)
     golden_cross = cross & (sma_5_over_25 == True)
-    dead_corss = cross & (sma_5_over_25 == False)
+    dead_cross = cross & (sma_5_over_25 == False)
     golden_cross.drop(golden_cross.head(25).index, inplace=True)
     dead_cross.drop(dead_cross.head(25).index, inplace=True)
 
     # 日付のリストに変換
     golden_list = [x.date() for x in golden_cross[golden_cross].index.to_pydatetime()]
     dead_list = [x.date() for x in dead_cross[dead_cross].index.to_pydatetime()]
-    return goldem_list, dead_list
+    return golden_list, dead_list
 
-def simulate_golden_dead_cross(db_file_name, start_date, end_date, code_list, deposit, order_under_limit):
-    """ deposit: 初期の所持金
-        order_under_limit: ゴールデンクロス時の最小購入金額
+def simulate_golden_dead_cross(db_file_name,
+                               start_date, end_date,
+                               code_list,
+                               deposit,
+                               order_under_limit):
+    """deposit: 初期の所持金
+    　 order_order_under_limit: ゴールデンクロス時の最小購入金額 
     """
+    
     stocks = create_stock_data(db_file_name, code_list, start_date, end_date)
 
-    # {ゴールデンクロス・デッドクロスが発生した日：発生した銘柄のリスト}
+    # {ゴールデンクロス・デッドクロスが発生した日 : 発生した銘柄のリスト}
     # の辞書を作成
     golden_dict = defaultdict(list)
     dead_dict = defaultdict(list)
@@ -66,13 +71,20 @@ def simulate_golden_dead_cross(db_file_name, start_date, end_date, code_list, de
         if date in dead_dict:
             for code in dead_dict[date]:
                 if code in portfolio.stocks:
-                    order_list.append(sim.SellMarketOrder(code, portfolio.stocks[code].current_count))
-        # 保有していない株でGolden crossが発生していたら買う
+                    order_list.append(
+                        sim.SellMarketOrder(code,
+                                            portfolio.stocks[code].current_count))
+        # 保有していない株でgolden crossが発生していたら買う
         if date in golden_dict:
             for code in golden_dict[date]:
                 if code not in portfolio.stocks:
-                    order_list.append(sim.BuyMarketOrderMoreThan(code, stocks[code]['unit'], order_under_limit))
+                    order_list.append(
+                        sim.BuyMarketOrderMoreThan(code,
+                                                   stocks[code]['unit'],
+                                                   order_under_limit))
         return order_list
 
-    return sim.simulate(start_date, end_date, deposit, trade_func, get_open_price_func, get_close_price_func)
-
+    return sim.simulate(start_date, end_date,
+                        deposit,
+                        trade_func,
+                        get_open_price_func, get_close_price_func)

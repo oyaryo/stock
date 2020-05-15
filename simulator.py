@@ -1,17 +1,18 @@
 import math
+import sys
 import collections
 import pandas as pd
 import japandas
 
 
-def calc_tax(self, total_profit):
+def calc_tax(total_profit):
     """儲けに対する税金計算
     """
     if total_profit < 0:
         return 0
     return int(total_profit * 0.20315)
 
-def calc_fee(self, total):
+def calc_fee(total):
     """約定手数料計算（楽天証券を想定）
     """
     if total <= 50000:
@@ -31,19 +32,55 @@ def calc_fee(self, total):
     else:
         return 1050
 
-def calc_cost_of_buying(self, count, price):
+def calc_cost_of_buying(count, price):
     """株を買うのに必要なコストと手数料を計算
     """
     subtotal = int(count * price)
     fee = calc_fee(subtotal)
     return subtotal + fee, fee
 
-def calc_cost_of_selling(self, count, price):
+def calc_cost_of_selling(count, price):
     """株を売るのに必要なコストと手数料を計算
     """
     subtotal = int(count * price)
     fee = calc_fee(subtotal)
     return fee, fee
+
+def calc_max_drawdown(price):
+    """最大ドローダウンを計算して返す
+    """
+    cummax_ret = prices.cummax()
+    drawdown = cummax_ret - prices
+    max_drawdown_date = drawdown.idxmax()
+    return drawdown[max_drawdown_date] / cummax_ret[max_drawdown_date]
+
+def calc_sharp_ratio(returns):
+    """シャープレシオを計算して返す
+    """
+    # .meanは平均値（＝期待値）を求めるメソッド
+    return returns.mean() / returns.std()
+
+def calc_information_ratio(returns, benchmark_retruns):
+    """インフォメーションレシオを計算して返す
+    """
+    excess_returns = returns - benchmark_retruns
+    return excess_returns.mean() / excess_returns.std()
+
+def calc_sortino_ratio(returns):
+    """ソルティノレシオを計算して返す
+    """
+    tdd = math.sqrt(returns.clip_upper(0).pow(2).sum() / returns.size)
+    return returns.mean() / tdd
+
+def calc_sortino_bench(returns, benchmark_retruns):
+    excess_returns = returns - benchmark_retruns
+    return calc_sortino_ratio(excess_returns)
+
+def calc_calmar_ratio(prices, returns):
+    """カルマーレシオを計算して返す
+    """
+    return returns.mean() / calc_max_drawdown(prices)
+
 
 class OwnedStock(object):
     def __init__(self):
@@ -73,8 +110,11 @@ class Portfolio(object):
         self.total_profit = 0               # 総利益（税引き前）
         self.total_tax = 0                  # （源泉徴収）税金合計
         self.total_fee = 0                  # 手数料合計
-        # 保有銘柄　銘柄コード　->　OwnedStockへの辞書
-        self.stocks = collections.defaultdict(OwnedStock)
+        self.count_of_trades = 0            # トレード総数
+        self.count_of_wins = 0              # 価値トレード数
+        self.total_gains = 0                # 総利益（損失分の相殺無しの値）
+        self.total_losses = 0               # 総損出
+        self.stocks = collections.defaultdict(OwnedStock) # 保有銘柄　銘柄コード　->　OwnedStockへの辞書
 
     def add_deposit(self, deposit):
         """預り金を増やす（＝証券会社へ入金）
@@ -114,7 +154,15 @@ class Portfolio(object):
         profit = int((price - average_cost) * count - cost)
         self.total_profit += profit
 
-        # 源泉徴収決定
+        # トレード結果保存
+        self.count_of_trades += 1
+        if profit >= 0:
+            self.count_of_wins += 1
+            self.total_gains += profit
+        else:
+            self.total_losses += -profit
+
+        # 源泉徴額収決定
         current_tax = calc_tax(self.total_profit)
         withholding = current_tax - self.total_tax
         self.total_tax = current_tax
@@ -127,6 +175,29 @@ class Portfolio(object):
         """
         stock_price = sum(get_current_price_func(code) * stock.current_count for code, stock in self.stocks.items())
         return stock_price + self.deposit
+
+    def calc_winning_percentage(self):
+        """勝率を返す"""
+        return (self.count_of_wins / self.count_of_trades) * 100
+
+    def calc_payoff_ratio(self):
+        """ペイオフレシオを返す
+        """
+        loss = self.count_of_trades - self.count_of_wins
+        if self.count_of_wins and loss:
+            avg_gain = self.total_gains / self.count_of_wins
+            avg_losses = self.total_losses / loss
+            return avg_gain / ave_losses
+        else:
+            return sys.float_info.max
+
+    def calc_profit_factor(self):
+        """プロフィットファクターを返す
+        """
+        if self.total_losses:
+            return self.total_gains / self.total_losses
+        else:
+            return sys.float_info.max
 
 class Order(object):
     def __init__(self, code):
@@ -207,20 +278,18 @@ def tse_date_range(start_date, end_date):
     tse_business_day = pd.offsets.CustomBusinessDay(calendar=japandas.TSEHolidayCalendar())
     return pd.date_range(start_date, end_date, freq=tse_business_day)
 
-def simulate(start_date, end_date, deposit, trade_func, get_open_price_func, get_close_price_func)
+def simulate(start_date, end_date, deposit, trade_func,
+             get_open_price_func, get_close_price_func):
     """
     [start_date, end_date]の範囲内の売買シミュレーションを行う
-    deposit:
-        最初の所持金
+    deposit: 最初の所持金
     trade_func:
         シミュレーションする取引関数
         （引数 date, portfolio でOrderのリストを返す関数）
     get_open_price_func:
-        指定銘柄コードの指定日の始値を返す関数
-        （引数 date, code）
+        指定銘柄コードの指定日の始値を返す関数 (引数 date, code)
     get_close_price_func:
-        指定銘柄コードの指定日の終値を関数
-        （引数 date, code）
+        指定銘柄コードの指定日の始値を返す関数 (引数 date, code)
     """
 
     portfolio = Portfolio(deposit)
@@ -229,25 +298,34 @@ def simulate(start_date, end_date, deposit, trade_func, get_open_price_func, get
     profit_or_loss_list = []
     def record(d):
         # 本日(d)の損益などを記録
-        current_total_price = portfolio.calc_current_total_price(lambda code: get_close_price_func(d, code))
-        total_price_list.append(current_total_price - portfolio.amount_of_investment)
+        current_total_price = portfolio.calc_current_total_price(
+            lambda code: get_close_price_func(d, code))
+        total_price_list.append(current_total_price)
+        profit_or_loss_list.append(current_total_price
+                                   - portfolio.amount_of_investment)
 
     def execute_order(d, orders):
         # 本日(d)において注文(orders)をすべて執行する
         for order in orders:
-            order.execute(date, portfolio, lambda code: get_open_price_func(d, code))
+            order.execute(d, portfolio,
+                          lambda code: get_open_price_func(d, code))
 
     order_list = []
-    date_range = [pdate.to_pydatetime().date() for pdate in tse_date_range(start_date, end_date)]
+    date_range = [pdate.to_pydatetime().date()
+                  for pdate in tse_date_range(start_date, end_date)]
     for date in date_range[:-1]:
-        execute_order(date, order_list)          # 前日に行われた注文の執行
-        order_list = trade_func(date, portfolio) # 明日実行する注文を決定
+        execute_order(date, order_list)          # 前日に行われた注文を執行
+        order_list = trade_func(date, portfolio) # 明日実行する注文を決定する
         record(date)                             # 損益等の記録
 
     # 最終日に保有株は全部売却
     last_date = date_range[-1]
-    execute_order(last_date, [SellMarketOrder(code, stock.current_count) for code, stock in portfolio.stocks.items()])
+    execute_order(last_date,
+                  [SellMarketOrder(code, stock.current_count)
+                   for code, stock in portfolio.stocks.items()])
     record(last_date)
 
-    return portfolio, pd.DataFrame(data={'price': total_price_list, 'portfolio': profit_or_loss_list}, index=date_range)
-
+    return portfolio, \
+           pd.DataFrame(data={'price': total_price_list,
+                              'profit': profit_or_loss_list},
+                        index=pd.DatetimeIndex(date_range))
